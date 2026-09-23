@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
   calculateLogicalAvailability,
+  calculateMonthlyAvailability,
   calculateSla,
+  buildDatasetStats,
   cleanObservation,
   dedupeObservations,
   normalizeLatency,
@@ -74,6 +76,18 @@ describe('duplicate and logical check handling', () => {
     expect(deduped).toHaveLength(2);
   });
 
+  it('summarizes logical availability by UTC month', () => {
+    const observations = [
+      cleanObservation({ service_name: 'auth-api', timestamp: '2025-05-31T23:45:00Z', status_code: '200', latency: '120', latency_unit: 'ms', agent: 'agent-1', region: 'ap-south-1' }),
+      cleanObservation({ service_name: 'auth-api', timestamp: '2025-06-01T00:00:00Z', status_code: '500', latency: '120', latency_unit: 'ms', agent: 'agent-1', region: 'ap-south-1' }),
+    ];
+
+    expect(calculateMonthlyAvailability(observations)).toMatchObject([
+      { month: '2025-05', totalChecks: 1, availableChecks: 1, availabilityPct: 100 },
+      { month: '2025-06', totalChecks: 1, unavailableChecks: 1, availabilityPct: 0 },
+    ]);
+  });
+
   it('treats a logical check as available when at least one agent succeeds', () => {
     const observations = [
       cleanObservation({ service_name: 'auth-api', timestamp: '2025-05-08T00:00:00Z', status_code: '200', latency: '120', latency_unit: 'ms', agent: 'agent-1', region: 'ap-south-1' }),
@@ -105,5 +119,45 @@ describe('duplicate and logical check handling', () => {
     expect(summary.totalChecks).toBe(1);
     expect(summary.availableChecks).toBe(1);
     expect(calculateSla(1, 2)).toBeCloseTo(50, 10);
+  });
+});
+
+describe('quality issue accounting', () => {
+  it('retains usable observations with quality flags', () => {
+    const observation = cleanObservation({
+      service_name: 'auth-api',
+      timestamp: '2025-05-08T00:00:00Z',
+      status_code: '999',
+      latency: '',
+      latency_unit: 'ms',
+      agent: 'agent-1',
+      region: 'ap-south-1',
+    });
+
+    expect(observation.valid).toBe(true);
+    expect(observation.latencyMs).toBeNull();
+    expect(observation.qualityFlags).toEqual(['MISSING_LATENCY', 'INVALID_STATUS']);
+    expect(buildDatasetStats([observation])).toMatchObject({
+      totalObservations: 1,
+      qualityIssueCount: 1,
+    });
+  });
+
+  it('does not count invalid observations that are not persisted', () => {
+    const observation = cleanObservation({
+      service_name: 'auth-api',
+      timestamp: 'not-a-timestamp',
+      status_code: '200',
+      latency: '120',
+      latency_unit: 'ms',
+      agent: 'agent-1',
+      region: 'ap-south-1',
+    });
+
+    expect(observation.valid).toBe(false);
+    expect(buildDatasetStats([observation])).toMatchObject({
+      totalObservations: 0,
+      qualityIssueCount: 0,
+    });
   });
 });

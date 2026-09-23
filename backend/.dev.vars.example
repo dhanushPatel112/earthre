@@ -1,2 +1,2 @@
-DATABASE_URL=postgresql://user:password@host/dbname?sslmode=require
+DATABASE_URL=******host/dbname?sslmode=require
 ALLOWED_ORIGIN=http://localhost:3000

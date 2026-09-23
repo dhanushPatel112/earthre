@@ -2,8 +2,8 @@
 
 This implementation separates the application into the required runtime layers:
 
-- Frontend: `code/frontend` (Next.js dashboard)
-- Worker: `code/backend` (Cloudflare Worker ingestion API)
+- Frontend: `frontend` (Next.js dashboard)
+- Worker: `backend` (Cloudflare Worker ingestion API)
 
 ## Architecture
 
@@ -17,16 +17,24 @@ Why these choices:
 - Cloudflare Workers are stateless, easy to deploy, and a good fit for ingestion and validation logic without exposing database credentials to the browser.
 - Neon PostgreSQL is a managed PostgreSQL service with a generous free tier and simple Drizzle integration, which aligns with the no-cost requirement.
 
-## Local verification status
+## Live deployment
 
-This environment did not include production Vercel, Cloudflare, or Neon credentials, so the live external deployment URLs were not verified in this session.
+The production deployment has been verified end to end:
+
+- Frontend: https://earthre-taupe.vercel.app
+- Cloudflare Worker API: https://earthre.pateldhanush1208.workers.dev/
+- Worker health: https://earthre.pateldhanush1208.workers.dev/health
+- Database: Neon PostgreSQL
+- Last verified live: 2026-09-23
+
+The Worker does not keep an in-memory dataset. Uploads, observations, service records, upload metadata, dashboard statistics, and logs are read from PostgreSQL. Without `DATABASE_URL`, database-backed endpoints fail explicitly instead of silently falling back to process memory.
+
+## Local verification status
 
 Local runtime checks did complete successfully:
 
 - Worker health: `http://127.0.0.1:8787/health`
 - Frontend: `http://localhost:3000`
-
-The Worker does not keep an in-memory dataset. Uploads, observations, service records, upload metadata, dashboard statistics, and logs are read from PostgreSQL. Without `DATABASE_URL`, database-backed endpoints fail explicitly instead of silently falling back to process memory.
 
 ## Data findings from the supplied CSV
 
@@ -95,18 +103,42 @@ The SQL migration is in `code/backend/migrations/0001_init.sql`. Apply it to the
 - Exact duplicates are dropped.
 - Valid agent-level observations are retained even when multiple agents share a `(service, timestamp)` slot.
 
+The dashboard's **Quality issues** metric is the number of retained observations
+with one or more quality flags. It is not the number of individual flags:
+an observation with both missing latency and status `999` counts once. Rows that
+fail required identity or timestamp checks are not persisted and are not included
+in this metric; exact duplicates are counted separately.
+
 ## SLA formula
 
-The application uses the required formula:
+The application reports both an overall dataset view and month-wise SLA
+summaries. This matters because the business statement refers to monthly
+availability and possible billing credits; a single multi-day overview alone
+would not support that decision.
 
-Availability % = available logical checks / total expected logical checks * 100
+For every view, the application uses:
+
+Availability % = available logical checks / total expected logical checks \* 100
 
 The dashboard displays representative values with a sensible precision (for example 98.43%).
+Month-wise results are available from `GET /dashboard/monthly-stats` and are
+shown in the dashboard using UTC calendar months. If a dataset starts or ends
+mid-month, expected checks are limited to the observed dataset window for that
+month. Missing logical checks count as unavailable.
+
+## What I would do differently with more time
+
+- Move dashboard aggregation to SQL views or materialized views for larger datasets.
+- Process very large uploads asynchronously with progress reporting instead of holding the full CSV in one request.
+- Add database indexes and constraints for the most common log filters and active-upload queries.
+- Add an integration test against a disposable PostgreSQL database.
+- Show a breakdown of quality issues by flag type in the dashboard.
 
 ## API endpoints
 
 - `POST /uploads`
 - `GET /dashboard/stats`
+- `GET /dashboard/monthly-stats`
 - `GET /logs?from=YYYY-MM-DD&to=YYYY-MM-DD`
 - `GET /health`
 
@@ -156,14 +188,6 @@ Then open:
 
 - Worker: http://127.0.0.1:8787/health
 - Frontend: http://localhost:3000
-
-To clear local Wrangler state after stopping `wrangler dev`, run from PowerShell:
-
-```powershell
-Remove-Item -LiteralPath .\backend\.wrangler -Recurse -Force
-```
-
-If Windows reports that files are in use, stop the terminal running `wrangler dev` first. If the lock remains, close VS Code terminals using the Worker and stop only the specific `node`, `wrangler`, or `workerd` process shown in Task Manager, then retry the command. `.wrangler` is disposable local emulator/cache state and is ignored by Git.
 
 ## Backend deployment: Cloudflare Workers
 
@@ -255,7 +279,7 @@ curl.exe https://earthre-sla-worker.<your-subdomain>.workers.dev/health
 Expected response:
 
 ```json
-{"ok":true,"service":"earthre-sla-worker"}
+{ "ok": true, "service": "earthre-sla-worker" }
 ```
 
 Use this Worker URL as the frontend's `NEXT_PUBLIC_WORKER_API_URL`.
@@ -300,44 +324,6 @@ npx wrangler secret put ALLOWED_ORIGIN
 5. Replace `ALLOWED_ORIGIN` with the exact Vercel URL.
 6. Upload a CSV and verify `/dashboard/stats` and `/logs`.
 
-## Production deployment notes
-
-Because external platform credentials were not available in this environment, deployment was not verified live.
-
-For production deployment, use:
-
-```bash
-cd code/backend
-wrangler login
-wrangler deploy
-
-cd ../frontend
-vercel login
-vercel deploy
-```
-
-You should also configure the secret environment variables in the respective platforms and never commit `.env` or database secrets.
-
 ## Tests
 
 The critical ingestion and SLA logic is covered by unit tests in `code/backend/src/lib/core.test.ts`.
-
-## Limitations and future improvements
-
-If more time were available, the following would be improved:
-
-- stronger transactional database writes for upload replacement
-- a dedicated PostgreSQL schema migration setup with Drizzle migrations
-- richer charting and filtering in the Next.js UI
-- deployment verification against real Vercel/Cloudflare/Neon accounts
-- more complete integration tests for the worker upload path
-
-## Summary
-
-This repository contains a working local implementation of the requested architecture and core logic:
-
-- Next.js frontend in `code/frontend`
-- Cloudflare Worker ingestion API in `code/backend`
-- typed data-cleaning and SLA logic in the worker layer
-- date-filtered logs and collapsible statistics in the dashboard
-- unit-tested business logic for timestamp conversion, latency cleanup, duplicate handling, and SLA calculation

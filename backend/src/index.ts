@@ -7,6 +7,7 @@ import { healthCheckObservations } from './schema.js';
 import {
   buildDatasetStats,
   calculateLogicalAvailability,
+  calculateMonthlyAvailability,
   calculateSla,
   cleanObservation,
   computeAverageLatency,
@@ -166,6 +167,7 @@ const buildStats = (observations: StoredObservation[], upload: Record<string, un
       averageLatency: computeAverageLatency(rows),
       p95Latency: computeP95Latency(rows),
     };
+
   });
 
   return {
@@ -180,6 +182,21 @@ const buildStats = (observations: StoredObservation[], upload: Record<string, un
       datasetEnd: upload?.datasetEnd ?? dataset.datasetEnd?.toISOString() ?? null,
     },
     perService,
+  };
+
+};
+
+const buildMonthlyStats = (observations: StoredObservation[], upload: Record<string, unknown> | undefined) => {
+  const dataset = buildDatasetStats(observations);
+  const months = calculateMonthlyAvailability(observations, {
+    start: dataset.datasetStart ?? undefined,
+    end: dataset.datasetEnd ?? undefined,
+    services: dataset.services,
+  });
+  return {
+    months,
+    datasetStart: upload?.datasetStart ?? dataset.datasetStart?.toISOString() ?? null,
+    datasetEnd: upload?.datasetEnd ?? dataset.datasetEnd?.toISOString() ?? null,
   };
 };
 
@@ -291,6 +308,11 @@ export default {
       if (url.pathname === '/dashboard/stats' && request.method === 'GET') {
         const [observations, upload] = await Promise.all([loadActiveObservations(sql), getActiveUpload(sql)]);
         return json(200, buildStats(observations, upload as Record<string, unknown> | undefined), baseHeaders);
+      }
+
+      if (url.pathname === '/dashboard/monthly-stats' && request.method === 'GET') {
+        const [observations, upload] = await Promise.all([loadActiveObservations(sql), getActiveUpload(sql)]);
+        return json(200, buildMonthlyStats(observations, upload as Record<string, unknown> | undefined), baseHeaders);
       }
 
       if (url.pathname === '/logs' && request.method === 'GET') {

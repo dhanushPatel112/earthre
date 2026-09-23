@@ -26,6 +26,10 @@ export type LogicalAvailabilitySummary = {
   availabilityPct: number;
 };
 
+export type MonthlyAvailabilitySummary = LogicalAvailabilitySummary & {
+  month: string;
+};
+
 export function normalizeServiceName(value: string): string {
   return value.trim().replace(/\s+/g, '-').toLowerCase();
 }
@@ -248,7 +252,7 @@ export function calculateLogicalAvailability(
   }
 
   const totalChecks = availableChecks + unavailableChecks;
-  const availabilityPct = totalChecks === 0 ? 0 : (availableChecks / totalChecks) * 100;
+  const availabilityPct = calculateSla(availableChecks, totalChecks);
 
   return {
     totalChecks,
@@ -265,14 +269,44 @@ export function calculateSla(availableChecks: number, totalChecks: number): numb
   return (availableChecks / totalChecks) * 100;
 }
 
-export function generateExpectedLogicalChecks(start: Date, end: Date): Date[] {
-  const result: Date[] = [];
-  const intervalMs = 15 * 60 * 1000;
-  const cursor = new Date(start.getTime());
+export function calculateMonthlyAvailability(
+  observations: CleanObservation[],
+  options?: { start?: Date; end?: Date; services?: string[] },
+): MonthlyAvailabilitySummary[] {
+  const valid = observations.filter((observation) => observation.valid);
+  if (!valid.length) return [];
 
-  while (cursor <= end) {
-    result.push(new Date(cursor.getTime()));
-    cursor.setTime(cursor.getTime() + intervalMs);
+  const timestamps = valid
+    .map((observation) => new Date(observation.timestamp))
+    .filter((timestamp) => !Number.isNaN(timestamp.getTime()));
+  const datasetStart = options?.start ?? new Date(Math.min(...timestamps.map((date) => date.getTime())));
+  const datasetEnd = options?.end ?? new Date(Math.max(...timestamps.map((date) => date.getTime())));
+  if (datasetStart > datasetEnd) return [];
+
+  const services = options?.services ?? [...new Set(valid.map((observation) => observation.service))].sort();
+  const result: MonthlyAvailabilitySummary[] = [];
+  const cursor = new Date(Date.UTC(datasetStart.getUTCFullYear(), datasetStart.getUTCMonth(), 1));
+  const lastMonth = new Date(Date.UTC(datasetEnd.getUTCFullYear(), datasetEnd.getUTCMonth(), 1));
+
+  while (cursor <= lastMonth) {
+    const nextMonth = new Date(Date.UTC(cursor.getUTCFullYear(), cursor.getUTCMonth() + 1, 1));
+    const monthStart = new Date(Math.max(datasetStart.getTime(), cursor.getTime()));
+    const monthEnd = new Date(Math.min(datasetEnd.getTime(), nextMonth.getTime() - 1));
+    const monthObservations = valid.filter((observation) => {
+      const timestamp = new Date(observation.timestamp).getTime();
+      return timestamp >= monthStart.getTime() && timestamp <= monthEnd.getTime();
+    });
+    const summary = calculateLogicalAvailability(monthObservations, {
+      start: monthStart,
+      end: monthEnd,
+      services,
+    });
+    result.push({
+      month: `${cursor.getUTCFullYear()}-${String(cursor.getUTCMonth() + 1).padStart(2, '0')}`,
+      ...summary,
+      availabilityPct: calculateSla(summary.availableChecks, summary.totalChecks),
+    });
+    cursor.setUTCMonth(cursor.getUTCMonth() + 1);
   }
 
   return result;

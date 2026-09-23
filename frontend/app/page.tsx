@@ -30,6 +30,14 @@ type ServiceStat = {
     p95Latency: number | null
 }
 type DashboardStats = { overall: OverallStats; perService: ServiceStat[] }
+type MonthlyStat = {
+    month: string
+    totalChecks: number
+    availableChecks: number
+    unavailableChecks: number
+    availabilityPct: number
+}
+type MonthlyStats = { months: MonthlyStat[]; datasetStart: string | null; datasetEnd: string | null }
 type LogRow = {
     timestamp: string
     service: string
@@ -61,6 +69,8 @@ export default function HomePage() {
     const [uploadSummary, setUploadSummary] = useState<Record<string, unknown> | null>(null)
     const [errorMessage, setErrorMessage] = useState("")
     const [stats, setStats] = useState<DashboardStats | null>(null)
+    const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
+    const [isStatsExpanded, setIsStatsExpanded] = useState(true)
     const [logs, setLogs] = useState<LogsResponse>({ items: [], page: 1, pageSize: DEFAULT_PAGE_SIZE, total: 0 })
     const [fromDate, setFromDate] = useState("2025-05-08")
     const [toDate, setToDate] = useState("2025-05-16")
@@ -69,9 +79,16 @@ export default function HomePage() {
     const [loadingLogs, setLoadingLogs] = useState(false)
 
     const loadStats = useCallback(async () => {
-        const response = await fetch(`${API_URL}/dashboard/stats`)
-        if (!response.ok) throw new Error("Dashboard statistics could not be loaded.")
-        setStats(await response.json())
+        const statsResponse = await fetch(`${API_URL}/dashboard/stats`)
+        if (!statsResponse.ok) throw new Error("Dashboard statistics could not be loaded.")
+        setStats(await statsResponse.json())
+
+        try {
+            const monthlyResponse = await fetch(`${API_URL}/dashboard/monthly-stats`)
+            if (monthlyResponse.ok) setMonthlyStats(await monthlyResponse.json())
+        } catch {
+            // The existing dashboard remains usable if the optional monthly report is unavailable.
+        }
     }, [])
 
     const loadLogs = useCallback(
@@ -248,7 +265,30 @@ export default function HomePage() {
 
                 {/* ── Statistics ──────────────────────────────────────── */}
                 <section className="mt-10">
-                    {stats ? (
+                    <div className="mb-3 flex items-center justify-between">
+                        <div>
+                            <p className="text-xs uppercase tracking-[0.18em]" style={{ color: "#6B7684" }}>
+                                Dashboard statistics
+                            </p>
+                            <p className="mt-1 text-sm" style={{ color: "#6B7684" }}>
+                                Logical availability and service-level detail
+                            </p>
+                        </div>
+                        {stats ? (
+                            <button
+                                type="button"
+                                aria-expanded={isStatsExpanded}
+                                aria-controls="dashboard-statistics"
+                                onClick={() => setIsStatsExpanded((expanded) => !expanded)}
+                                className="border px-3 py-2 text-xs font-medium transition-colors hover:bg-[#151B24] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#4FD1A5]"
+                                style={{ borderColor: "#1C2430", color: "#D4A64A" }}
+                            >
+                                {isStatsExpanded ? "Hide stats" : "Show stats"}
+                            </button>
+                        ) : null}
+                    </div>
+                    {stats && isStatsExpanded ? (
+                        <div id="dashboard-statistics">
                         <>
                             <div
                                 className="grid grid-cols-1 border sm:grid-cols-[auto_1fr]"
@@ -361,14 +401,48 @@ export default function HomePage() {
                                     </tbody>
                                 </table>
                             </div>
+
+                            <div className="mt-6 overflow-x-auto border" style={{ borderColor: "#1C2430" }}>
+                                <div className="border-b px-4 py-3" style={{ borderColor: "#1C2430" }}>
+                                    <p className="text-sm font-medium">Month-wise availability</p>
+                                    <p className="mt-1 text-xs" style={{ color: "#6B7684" }}>
+                                        Logical SLA summaries for the active dataset (UTC)
+                                    </p>
+                                </div>
+                                <table className="w-full min-w-[620px] border-collapse text-sm">
+                                    <thead>
+                                        <tr className="border-b text-left" style={{ borderColor: "#1C2430" }}>
+                                            {["Month", "Availability", "Expected", "Available", "Unavailable"].map((h) => (
+                                                <th key={h} className="px-4 py-3 font-medium" style={{ color: "#6B7684" }}>
+                                                    {h}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody style={{ fontFamily: FONT_MONO }}>
+                                        {(monthlyStats?.months ?? []).map((month) => (
+                                            <tr key={month.month} className="border-b last:border-b-0" style={{ borderColor: "#1C2430" }}>
+                                                <td className="px-4 py-3" style={{ fontFamily: FONT_SANS }}>{month.month}</td>
+                                                <td className="px-4 py-3 tabular-nums" style={{ color: "#4FD1A5" }}>
+                                                    {toPercent(month.availabilityPct)}
+                                                </td>
+                                                <td className="px-4 py-3 tabular-nums">{month.totalChecks}</td>
+                                                <td className="px-4 py-3 tabular-nums">{month.availableChecks}</td>
+                                                <td className="px-4 py-3 tabular-nums">{month.unavailableChecks}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
                         </>
+                        </div>
                     ) : (
-                        <div
+                        !stats ? <div
                             className="border border-dashed p-10 text-center text-sm"
                             style={{ borderColor: "#1C2430", color: "#6B7684" }}
                         >
                             Waiting for dataset upload.
-                        </div>
+                        </div> : null
                     )}
                 </section>
 
