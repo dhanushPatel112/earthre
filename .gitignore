@@ -1,0 +1,11 @@
+node_modules
+.next
+.env
+.env.*
+.dev.vars
+**/.wrangler
+**/dist
+**/.next
+coverage
+code - backup/
+*.zip
