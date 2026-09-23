@@ -72,7 +72,7 @@ export default function HomePage() {
     const [monthlyStats, setMonthlyStats] = useState<MonthlyStats | null>(null)
     const [isStatsExpanded, setIsStatsExpanded] = useState(true)
     const [logs, setLogs] = useState<LogsResponse>({ items: [], page: 1, pageSize: DEFAULT_PAGE_SIZE, total: 0 })
-    const [fromDate, setFromDate] = useState("2025-05-08")
+    const [fromDate, setFromDate] = useState("2025-04-08")
     const [toDate, setToDate] = useState("2025-05-16")
     const [page, setPage] = useState(1)
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
@@ -289,161 +289,182 @@ export default function HomePage() {
                     </div>
                     {stats && isStatsExpanded ? (
                         <div id="dashboard-statistics">
-                        <>
-                            <div
-                                className="grid grid-cols-1 border sm:grid-cols-[auto_1fr]"
-                                style={{ borderColor: "#1C2430" }}
-                            >
-                                {/* Hero readout */}
+                            <>
                                 <div
-                                    className="flex flex-col justify-center border-b px-6 py-8 sm:border-b-0 sm:border-r sm:px-10"
+                                    className="grid grid-cols-1 border sm:grid-cols-[auto_1fr]"
                                     style={{ borderColor: "#1C2430" }}
                                 >
-                                    <span className="text-xs" style={{ color: "#6B7684" }}>
-                                        Overall availability
-                                    </span>
-                                    <span
-                                        className="mt-1 text-[3.75rem] font-semibold leading-none tabular-nums"
-                                        style={{ fontFamily: FONT_MONO, color: "#4FD1A5" }}
+                                    {/* Hero readout */}
+                                    <div
+                                        className="flex flex-col justify-center border-b px-6 py-8 sm:border-b-0 sm:border-r sm:px-10"
+                                        style={{ borderColor: "#1C2430" }}
                                     >
-                                        {toPercent(stats.overall.availabilityPct)}
-                                    </span>
-                                    <span className="mt-3 text-xs" style={{ color: "#6B7684" }}>
-                                        {formatDateTime(stats.overall.datasetStart)} →{" "}
-                                        {formatDateTime(stats.overall.datasetEnd)}
-                                    </span>
+                                        <span className="text-xs" style={{ color: "#6B7684" }}>
+                                            Overall availability
+                                        </span>
+                                        <span
+                                            className="mt-1 text-[3.75rem] font-semibold leading-none tabular-nums"
+                                            style={{ fontFamily: FONT_MONO, color: "#4FD1A5" }}
+                                        >
+                                            {toPercent(stats.overall.availabilityPct)}
+                                        </span>
+                                        <span className="mt-3 text-xs" style={{ color: "#6B7684" }}>
+                                            {formatDateTime(stats.overall.datasetStart)} →{" "}
+                                            {formatDateTime(stats.overall.datasetEnd)}
+                                        </span>
+                                    </div>
+
+                                    {/* Supporting readouts */}
+                                    <div
+                                        className="grid grid-cols-2 gap-px sm:grid-cols-3"
+                                        style={{ background: "#1C2430" }}
+                                    >
+                                        <MetricCell
+                                            label="Expected checks"
+                                            value={stats.overall.totalExpectedLogicalChecks}
+                                        />
+                                        <MetricCell
+                                            label="Available"
+                                            value={stats.overall.availableLogicalChecks}
+                                            tint="#4FD1A5"
+                                        />
+                                        <MetricCell
+                                            label="Unavailable"
+                                            value={stats.overall.unavailableLogicalChecks}
+                                            tint="#F0625B"
+                                        />
+                                        <MetricCell
+                                            label="Agent observations"
+                                            value={stats.overall.totalAgentObservations}
+                                        />
+                                        <MetricCell
+                                            label="Quality issues"
+                                            value={stats.overall.dataQualityIssueCount}
+                                            tint="#D4A64A"
+                                        />
+                                        <MetricCell label="Services tracked" value={services.length} />
+                                    </div>
                                 </div>
 
-                                {/* Supporting readouts */}
-                                <div
-                                    className="grid grid-cols-2 gap-px sm:grid-cols-3"
-                                    style={{ background: "#1C2430" }}
-                                >
-                                    <MetricCell
-                                        label="Expected checks"
-                                        value={stats.overall.totalExpectedLogicalChecks}
-                                    />
-                                    <MetricCell
-                                        label="Available"
-                                        value={stats.overall.availableLogicalChecks}
-                                        tint="#4FD1A5"
-                                    />
-                                    <MetricCell
-                                        label="Unavailable"
-                                        value={stats.overall.unavailableLogicalChecks}
-                                        tint="#F0625B"
-                                    />
-                                    <MetricCell
-                                        label="Agent observations"
-                                        value={stats.overall.totalAgentObservations}
-                                    />
-                                    <MetricCell
-                                        label="Quality issues"
-                                        value={stats.overall.dataQualityIssueCount}
-                                        tint="#D4A64A"
-                                    />
-                                    <MetricCell label="Services tracked" value={services.length} />
-                                </div>
-                            </div>
-
-                            {/* Per-service table */}
-                            <div className="mt-6 overflow-x-auto border" style={{ borderColor: "#1C2430" }}>
-                                <table className="w-full min-w-[720px] border-collapse text-sm">
-                                    <thead>
-                                        <tr className="border-b text-left" style={{ borderColor: "#1C2430" }}>
-                                            {[
-                                                "Service",
-                                                "Availability",
-                                                "Expected",
-                                                "Available",
-                                                "Unavailable",
-                                                "Avg latency",
-                                                "P95 latency"
-                                            ].map((h) => (
-                                                <th
-                                                    key={h}
-                                                    className="px-4 py-3 font-medium"
-                                                    style={{ color: "#6B7684" }}
+                                {/* Per-service table */}
+                                <div className="mt-6 overflow-x-auto border" style={{ borderColor: "#1C2430" }}>
+                                    <table className="w-full min-w-[720px] border-collapse text-sm">
+                                        <thead>
+                                            <tr className="border-b text-left" style={{ borderColor: "#1C2430" }}>
+                                                {[
+                                                    "Service",
+                                                    "Availability",
+                                                    "Expected",
+                                                    "Available",
+                                                    "Unavailable",
+                                                    "Avg latency",
+                                                    "P95 latency"
+                                                ].map((h) => (
+                                                    <th
+                                                        key={h}
+                                                        className="px-4 py-3 font-medium"
+                                                        style={{ color: "#6B7684" }}
+                                                    >
+                                                        {h}
+                                                    </th>
+                                                ))}
+                                            </tr>
+                                        </thead>
+                                        <tbody style={{ fontFamily: FONT_MONO }}>
+                                            {services.map((service) => (
+                                                <tr
+                                                    key={service.service}
+                                                    className="border-b last:border-b-0"
+                                                    style={{ borderColor: "#1C2430" }}
                                                 >
-                                                    {h}
-                                                </th>
+                                                    <td
+                                                        className="px-4 py-3 font-medium"
+                                                        style={{ fontFamily: FONT_SANS }}
+                                                    >
+                                                        {service.service}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums" style={{ color: "#4FD1A5" }}>
+                                                        {toPercent(service.availabilityPct)}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums">{service.expectedChecks}</td>
+                                                    <td className="px-4 py-3 tabular-nums">
+                                                        {service.availableChecks}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums">
+                                                        {service.unavailableChecks}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums" style={{ color: "#6B7684" }}>
+                                                        {service.averageLatency !== null
+                                                            ? `${service.averageLatency.toFixed(0)} ms`
+                                                            : "—"}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums" style={{ color: "#6B7684" }}>
+                                                        {service.p95Latency !== null
+                                                            ? `${service.p95Latency.toFixed(0)} ms`
+                                                            : "—"}
+                                                    </td>
+                                                </tr>
                                             ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody style={{ fontFamily: FONT_MONO }}>
-                                        {services.map((service) => (
-                                            <tr
-                                                key={service.service}
-                                                className="border-b last:border-b-0"
-                                                style={{ borderColor: "#1C2430" }}
-                                            >
-                                                <td className="px-4 py-3 font-medium" style={{ fontFamily: FONT_SANS }}>
-                                                    {service.service}
-                                                </td>
-                                                <td className="px-4 py-3 tabular-nums" style={{ color: "#4FD1A5" }}>
-                                                    {toPercent(service.availabilityPct)}
-                                                </td>
-                                                <td className="px-4 py-3 tabular-nums">{service.expectedChecks}</td>
-                                                <td className="px-4 py-3 tabular-nums">{service.availableChecks}</td>
-                                                <td className="px-4 py-3 tabular-nums">{service.unavailableChecks}</td>
-                                                <td className="px-4 py-3 tabular-nums" style={{ color: "#6B7684" }}>
-                                                    {service.averageLatency !== null
-                                                        ? `${service.averageLatency.toFixed(0)} ms`
-                                                        : "—"}
-                                                </td>
-                                                <td className="px-4 py-3 tabular-nums" style={{ color: "#6B7684" }}>
-                                                    {service.p95Latency !== null
-                                                        ? `${service.p95Latency.toFixed(0)} ms`
-                                                        : "—"}
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-
-                            <div className="mt-6 overflow-x-auto border" style={{ borderColor: "#1C2430" }}>
-                                <div className="border-b px-4 py-3" style={{ borderColor: "#1C2430" }}>
-                                    <p className="text-sm font-medium">Month-wise availability</p>
-                                    <p className="mt-1 text-xs" style={{ color: "#6B7684" }}>
-                                        Logical SLA summaries for the active dataset (UTC)
-                                    </p>
+                                        </tbody>
+                                    </table>
                                 </div>
-                                <table className="w-full min-w-[620px] border-collapse text-sm">
-                                    <thead>
-                                        <tr className="border-b text-left" style={{ borderColor: "#1C2430" }}>
-                                            {["Month", "Availability", "Expected", "Available", "Unavailable"].map((h) => (
-                                                <th key={h} className="px-4 py-3 font-medium" style={{ color: "#6B7684" }}>
-                                                    {h}
-                                                </th>
-                                            ))}
-                                        </tr>
-                                    </thead>
-                                    <tbody style={{ fontFamily: FONT_MONO }}>
-                                        {(monthlyStats?.months ?? []).map((month) => (
-                                            <tr key={month.month} className="border-b last:border-b-0" style={{ borderColor: "#1C2430" }}>
-                                                <td className="px-4 py-3" style={{ fontFamily: FONT_SANS }}>{month.month}</td>
-                                                <td className="px-4 py-3 tabular-nums" style={{ color: "#4FD1A5" }}>
-                                                    {toPercent(month.availabilityPct)}
-                                                </td>
-                                                <td className="px-4 py-3 tabular-nums">{month.totalChecks}</td>
-                                                <td className="px-4 py-3 tabular-nums">{month.availableChecks}</td>
-                                                <td className="px-4 py-3 tabular-nums">{month.unavailableChecks}</td>
+
+                                <div className="mt-6 overflow-x-auto border" style={{ borderColor: "#1C2430" }}>
+                                    <div className="border-b px-4 py-3" style={{ borderColor: "#1C2430" }}>
+                                        <p className="text-sm font-medium">Month-wise availability</p>
+                                        <p className="mt-1 text-xs" style={{ color: "#6B7684" }}>
+                                            Logical SLA summaries for the active dataset (UTC)
+                                        </p>
+                                    </div>
+                                    <table className="w-full min-w-[620px] border-collapse text-sm">
+                                        <thead>
+                                            <tr className="border-b text-left" style={{ borderColor: "#1C2430" }}>
+                                                {["Month", "Availability", "Expected", "Available", "Unavailable"].map(
+                                                    (h) => (
+                                                        <th
+                                                            key={h}
+                                                            className="px-4 py-3 font-medium"
+                                                            style={{ color: "#6B7684" }}
+                                                        >
+                                                            {h}
+                                                        </th>
+                                                    )
+                                                )}
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
+                                        </thead>
+                                        <tbody style={{ fontFamily: FONT_MONO }}>
+                                            {(monthlyStats?.months ?? []).map((month) => (
+                                                <tr
+                                                    key={month.month}
+                                                    className="border-b last:border-b-0"
+                                                    style={{ borderColor: "#1C2430" }}
+                                                >
+                                                    <td className="px-4 py-3" style={{ fontFamily: FONT_SANS }}>
+                                                        {month.month}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums" style={{ color: "#4FD1A5" }}>
+                                                        {toPercent(month.availabilityPct)}
+                                                    </td>
+                                                    <td className="px-4 py-3 tabular-nums">{month.totalChecks}</td>
+                                                    <td className="px-4 py-3 tabular-nums">{month.availableChecks}</td>
+                                                    <td className="px-4 py-3 tabular-nums">
+                                                        {month.unavailableChecks}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </>
                         </div>
-                    ) : (
-                        !stats ? <div
+                    ) : !stats ? (
+                        <div
                             className="border border-dashed p-10 text-center text-sm"
                             style={{ borderColor: "#1C2430", color: "#6B7684" }}
                         >
                             Waiting for dataset upload.
-                        </div> : null
-                    )}
+                        </div>
+                    ) : null}
                 </section>
 
                 {/* ── Observation logs ────────────────────────────────── */}
