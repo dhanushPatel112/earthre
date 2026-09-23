@@ -1,7 +1,9 @@
 import { parse } from 'csv-parse/sync';
 import { neon, type NeonQueryFunction } from '@neondatabase/serverless';
+import { drizzle } from 'drizzle-orm/neon-http';
 import { z } from 'zod';
 
+import { healthCheckObservations } from './schema.js';
 import {
   buildDatasetStats,
   calculateLogicalAvailability,
@@ -56,39 +58,37 @@ const parseCsvRows = (text: string) =>
     relax_column_count: true,
   }) as Array<Record<string, string>>;
 
+const OBSERVATION_BATCH_SIZE = 5_000;
+
 const insertObservations = async (
   sql: Database,
   uploadId: number,
   observations: CleanObservation[],
   serviceIds: Map<string, number>,
 ) => {
-  const batchSize = 250;
+  const db = drizzle(sql);
 
-  for (let offset = 0; offset < observations.length; offset += batchSize) {
-    const batch = observations.slice(offset, offset + batchSize);
-    const values: unknown[] = [];
-    const placeholders = batch.map((observation, index) => {
-      const base = index * 9;
-      values.push(
-        uploadId,
-        serviceIds.get(observation.service),
-        observation.timestamp,
-        observation.statusCode,
-        observation.latencyMs,
-        observation.agent,
-        observation.region,
-        observation.isAvailable,
-        JSON.stringify(observation.qualityFlags),
-      );
-      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5}, $${base + 6}, $${base + 7}, $${base + 8}, $${base + 9})`;
-    });
-
-    await sql.query(
-      `INSERT INTO health_check_observations
-        (upload_id, service_id, timestamp, status_code, latency_ms, agent, region, is_available, quality_flags)
-       VALUES ${placeholders.join(', ')}`,
-      values,
-    );
+  for (let offset = 0; offset < observations.length; offset += OBSERVATION_BATCH_SIZE) {
+    const batch = observations.slice(offset, offset + OBSERVATION_BATCH_SIZE);
+    await db.insert(healthCheckObservations).values(
+      batch.map((observation) => {
+        const serviceId = serviceIds.get(observation.service);
+        if (serviceId === undefined) {
+          throw new Error(`Failed to resolve service "${observation.service}".`);
+        }
+        return {
+          uploadId,
+          serviceId,
+          timestamp: new Date(observation.timestamp),
+          statusCode: observation.statusCode,
+          latencyMs: observation.latencyMs === null ? null : String(observation.latencyMs),
+          agent: observation.agent,
+          region: observation.region,
+          isAvailable: observation.isAvailable,
+          qualityFlags: observation.qualityFlags,
+        };
+      }),
+    ).execute();
   }
 };
 
@@ -268,11 +268,12 @@ export default {
         };
 
         await sql.query(
-          `UPDATE uploads SET is_active = false WHERE is_active = true AND id <> $1`,
-          [uploadId],
-        );
-        await sql.query(
-          `UPDATE uploads SET
+          `WITH deactivated AS (
+             UPDATE uploads
+             SET is_active = false
+             WHERE is_active = true AND id <> $5
+           )
+           UPDATE uploads SET
              status = 'COMPLETED',
              completed_at = NOW(),
              total_cleaned_rows = $1,
